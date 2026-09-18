@@ -67,6 +67,11 @@ python3 -m jupyter notebook
 
 자세한 내용은 [`INSIGHTS.md`](INSIGHTS.md) 참고.
 
+## 발표 자료
+
+- Live deck: <https://rchoi-v8.github.io/titanic-deck/>
+- 소스: <https://github.com/rchoi-v8/titanic-deck>
+
 ## 데이터 신뢰성 경고
 
 이 데이터는 **2차 가공본**입니다. `zero.*` 상수 컬럼 19개, Age 인위적 대체 흔적,
