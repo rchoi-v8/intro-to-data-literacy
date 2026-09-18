@@ -69,8 +69,8 @@ python3 -m jupyter notebook
 
 ## 발표 자료
 
-- Live deck: <https://rchoi-v8.github.io/titanic-deck/>
-- 소스: <https://github.com/rchoi-v8/titanic-deck>
+- Live deck: <https://rchoi-v8.github.io/titanic/>
+- 소스: `docs/index.html`
 
 ## 데이터 신뢰성 경고
 
