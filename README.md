@@ -23,6 +23,7 @@ Kaggle 타이타닉 데이터셋으로 배우는 데이터 분석 입문 프로�
 | `titanic_validation.ipynb` | 분석 결론 검증 노트북 (교차검증·신뢰구간·비선형) |
 | `titanic_final_model.ipynb` | 인사이트 기반 최종 예측 모델 |
 | `INSIGHTS.md` | 인사이트 보고서 (발견·한계·권고) |
+| `docs/index.html` | 발표용 HTML 슬라이드 덱 (에디토리얼 테마) |
 | `reports/` | 품질 점검 그래프 이미지 |
 
 ## 실행 방법

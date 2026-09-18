@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>타이타닉 데이터 분석 — 정확도의 착시</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,800;0,900;1,600&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#f5f2ea;
+    --paper-2:#efeae0;
+    --ink:#191714;
+    --ink-soft:#4a443b;
+    --muted:#8a8272;
+    --line:#d8d1c2;
+    --accent:#b3261e;
+    --accent-2:#c98a1b;
+    --green:#2f6b4f;
+    --serif:"Playfair Display", Georgia, serif;
+    --sans:"Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono:"IBM Plex Mono", monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    background:var(--paper);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;opacity:.5;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+    mix-blend-mode:multiply;
+  }
+  .deck{position:relative;height:100vh;width:100vw}
+
+  /* top / bottom bars */
+  .topbar{
+    position:fixed;top:0;left:0;right:0;z-index:40;
+    display:flex;justify-content:space-between;align-items:center;
+    padding:18px 34px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(var(--paper) 70%, rgba(245,242,234,0));
+  }
+  .bottombar{
+    position:fixed;bottom:0;left:0;right:0;z-index:40;
+    display:flex;justify-content:space-between;align-items:center;
+    padding:16px 34px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;
+    color:var(--muted);text-transform:uppercase;
+  }
+  .counter b{color:var(--ink);font-weight:500}
+  .progress{position:fixed;top:0;left:0;height:3px;background:var(--accent);z-index:50;width:0;transition:width .6s cubic-bezier(.7,0,.2,1)}
+
+  /* stage + slides */
+  .stage{position:absolute;inset:0}
+  .slide{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;justify-content:center;
+    padding:96px 8vw 90px;
+    opacity:0;visibility:hidden;
+    transition:opacity .55s ease, visibility .55s;
+  }
+  .slide.active{opacity:1;visibility:visible}
+  .wrap{max-width:1180px;width:100%;margin:0 auto}
+
+  /* reveal animation */
+  .r{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1)}
+  .slide.active .r{opacity:1;transform:none;transition-delay:calc(var(--d,0)*90ms)}
+  .r-clip{clip-path:inset(0 100% 0 0);transition:clip-path .9s cubic-bezier(.7,0,.2,1)}
+  .slide.active .r-clip{clip-path:inset(0 0 0 0);transition-delay:calc(var(--d,0)*90ms)}
+
+  /* typography */
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--accent);margin-bottom:20px}
+  h1{font-family:var(--serif);font-weight:900;line-height:.98;letter-spacing:-.02em}
+  h2{font-family:var(--serif);font-weight:800;font-size:clamp(30px,4vw,56px);line-height:1.05;letter-spacing:-.015em;margin-bottom:26px}
+  h2 em{font-style:italic;color:var(--accent)}
+  .lead{font-size:clamp(16px,1.5vw,21px);color:var(--ink-soft);font-weight:300;line-height:1.6;max-width:760px}
+  .num{font-family:var(--mono);font-weight:500;font-variant-numeric:tabular-nums}
+  .rule{height:1px;background:var(--line);margin:26px 0}
+  .tag{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border:1px solid var(--line);border-radius:2px;color:var(--muted);margin-right:6px}
+  .tag.hi{color:var(--green);border-color:#bcd3c6}
+  .tag.mid{color:var(--accent-2);border-color:#e6d3a8}
+  .tag.low{color:var(--accent);border-color:#e6bdb9}
+
+  /* cover */
+  .cover-meta{display:flex;gap:34px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-top:40px}
+  .cover h1{font-size:clamp(56px,11vw,168px)}
+  .cover .amp{color:var(--accent)}
+  .dropcap::first-letter{font-family:var(--serif);font-weight:900;font-size:3.4em;float:left;line-height:.78;padding:6px 14px 0 0;color:var(--accent)}
+
+  /* grids */
+  .grid{display:grid;gap:26px}
+  .g-3{grid-template-columns:repeat(3,1fr)}
+  .g-4{grid-template-columns:repeat(4,1fr)}
+  .card{border-top:2px solid var(--ink);padding-top:16px}
+  .card .big{font-family:var(--serif);font-weight:800;font-size:clamp(34px,4.6vw,64px);line-height:1}
+  .card .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:10px}
+  .card .sub{font-size:13px;color:var(--ink-soft);margin-top:8px;line-height:1.5}
+
+  /* correlation bars */
+  .corr{display:grid;grid-template-columns:132px 1fr 110px;align-items:center;gap:16px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .corr .name{font-family:var(--mono);font-size:13px;letter-spacing:.04em}
+  .track{position:relative;height:20px}
+  .track::before{content:"";position:absolute;left:50%;top:-4px;bottom:-4px;width:1px;background:var(--line)}
+  .range{position:absolute;top:6px;height:8px;background:rgba(25,23,20,.13);border-radius:4px}
+  .fill{position:absolute;top:2px;height:16px;border-radius:2px;transform:scaleX(0);transition:transform .9s cubic-bezier(.2,.8,.2,1)}
+  .fill.pos{left:50%;transform-origin:left;background:var(--green)}
+  .fill.neg{background:var(--accent);transform-origin:right}
+  .slide.active .fill{transform:scaleX(1);transition-delay:calc(var(--d,0)*90ms + 200ms)}
+  .corr .val{font-family:var(--mono);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+  .corr .val small{display:block;color:var(--muted);font-size:10px}
+
+  /* heatmap */
+  .heat{display:grid;grid-template-columns:96px repeat(3,1fr);gap:6px;max-width:560px}
+  .heat .hl{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;align-items:center;text-transform:uppercase;letter-spacing:.1em}
+  .heat .cell{aspect-ratio:1.5;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:var(--mono);font-size:clamp(16px,2vw,24px);transform:scale(.6);opacity:0;transition:transform .6s cubic-bezier(.2,.9,.25,1), opacity .6s}
+  .slide.active .heat .cell{transform:scale(1);opacity:1;transition-delay:calc(var(--d,0)*90ms)}
+  .heat .cell small{font-size:9px;opacity:.8;letter-spacing:.1em}
+
+  /* column charts */
+  .cols{display:flex;align-items:flex-end;gap:clamp(10px,2.4vw,34px);height:230px;border-bottom:1px solid var(--ink);padding-bottom:0}
+  .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%}
+  .col .bar{width:100%;max-width:74px;background:linear-gradient(var(--accent),#8f1e17);border-radius:3px 3px 0 0;height:calc(var(--h)*1%);transform-origin:bottom;transform:scaleY(0);transition:transform .9s cubic-bezier(.2,.85,.2,1)}
+  .col.alt .bar{background:linear-gradient(var(--accent-2),#a06d12)}
+  .slide.active .col .bar{transform:scaleY(1);transition-delay:calc(var(--d,0)*80ms + 150ms)}
+  .col .pct{font-family:var(--mono);font-size:11px;margin-bottom:6px;color:var(--ink-soft)}
+  .col .cap{font-family:var(--mono);font-size:11px;margin-top:10px;color:var(--muted);white-space:nowrap}
+
+  /* images */
+  .figrow{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  .figure{background:#fff;padding:12px 12px 14px;box-shadow:0 12px 30px rgba(25,23,20,.14);border:1px solid #e5dece;transform:rotate(var(--rot,-.6deg))}
+  .figure img{width:100%;display:block;border:1px solid #eee}
+  .figure figcaption{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--muted);margin-top:10px;text-transform:uppercase}
+
+  /* table */
+  table{border-collapse:collapse;width:100%;font-size:15px}
+  th,td{text-align:left;padding:13px 12px;border-bottom:1px solid var(--line)}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:400}
+  tr.hlrow td{background:rgba(179,38,30,.06);font-weight:600}
+  td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* callout */
+  .callout{border-left:3px solid var(--accent);padding:14px 22px;background:rgba(179,38,30,.05);font-size:15px;line-height:1.6;color:var(--ink-soft)}
+  .callout strong{color:var(--ink)}
+  .warn{border-left-color:var(--accent-2);background:rgba(201,138,27,.09)}
+
+  /* before/after */
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:end;height:300px}
+  .ba .item{display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+  .ba .v{font-family:var(--serif);font-weight:900;font-size:clamp(48px,8vw,110px);line-height:.9}
+  .ba .b{width:100%;border-radius:4px 4px 0 0;transform-origin:bottom;transform:scaleY(0);transition:transform 1s cubic-bezier(.2,.85,.2,1) .3s}
+  .slide.active .ba .b{transform:scaleY(1)}
+  .ba .old .b{background:#c9c2b2;height:66%}
+  .ba .new .b{background:var(--green);height:100%}
+  .ba .old .v{color:var(--muted)} .ba .new .v{color:var(--green)}
+
+  /* dots nav */
+  .dots{position:fixed;right:22px;top:50%;transform:translateY(-50%);z-index:45;display:flex;flex-direction:column;gap:12px}
+  .dots button{width:9px;height:9px;border-radius:50%;border:1px solid var(--muted);background:transparent;cursor:pointer;padding:0;transition:.3s}
+  .dots button.on{background:var(--accent);border-color:var(--accent);transform:scale(1.35)}
+
+  .hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--muted);text-transform:uppercase;z-index:40;text-align:center}
+  .idx{font-family:var(--mono);font-size:12px;letter-spacing:.2em;color:var(--muted);margin-bottom:14px}
+
+  @media (max-width:820px){
+    .slide{padding:84px 6vw 80px}
+    .g-3,.g-4,.figrow,.ba{grid-template-columns:1fr}
+    .ba{height:auto}
+    .dots{display:none}
+    .corr{grid-template-columns:88px 1fr 74px;gap:10px}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;animation:none !important}
+    .r,.r-clip,.fill,.heat .cell,.col .bar,.ba .b{opacity:1 !important;transform:none !important;clip-path:none !important}
+    .col .bar{height:calc(var(--h)*1%) !important}
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<div class="deck">
+  <header class="topbar">
+    <span>Titanic · Data Literacy</span>
+    <span>Kaggle heptapod/titanic · N=1,309</span>
+  </header>
+
+  <div class="stage" id="stage">
+
+    <!-- 1 COVER -->
+    <section class="slide cover active">
+      <div class="wrap">
+        <div class="kicker r" style="--d:0">데이터 분석 리포트 · 2026</div>
+        <h1>
+          <span class="r-clip" style="--d:1;display:block">정확도의</span>
+          <span class="r-clip" style="--d:2;display:block"><span class="amp">착시</span>를 넘어</span>
+        </h1>
+        <p class="lead r" style="--d:4">타이타닉 데이터. 품질 점검, 상관관계, 그리고 재현율을 지키는 예측 모델까지.</p>
+        <div class="cover-meta r" style="--d:5">
+          <span>Issue 03</span>
+          <span>N = 1,309</span>
+          <span>Features = 8</span>
+          <span>Insight-first</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2 DATA + WARNING -->
+    <section class="slide">
+      <div class="wrap">
+        <div class="kicker r" style="--d:0">01 — 데이터</div>
+        <h2 class="r" style="--d:1">원본이 아니라, <em>가공본</em>.</h2>
+        <p class="lead dropcap r" style="--d:2">1,309행 = 공개 train 891 + test 418의 병합. 값이 전부 0인 컬럼 19개. Age 결측은 0인데 소수점 나이 45개, <span class="num">Age==28</span> 295명. <span class="num">Fare==0</span> 17명. 전부 인위적 대체의 흔적.</p>
+        <div class="rule r" style="--d:3"></div>
+        <div class="grid g-4">
+          <div class="card r" style="--d:4"><div class="big num">891+418</div><div class="lbl">병합 행 수</div><div class="sub">공개 train·test 합본</div></div>
+          <div class="card r" style="--d:5"><div class="big num">19</div><div class="lbl">상수 컬럼</div><div class="sub">zero.* — 정보 없음</div></div>
+          <div class="card r" style="--d:6"><div class="big num">295</div><div class="lbl">Age == 28</div><div class="sub">최빈값 대체 의심</div></div>
+          <div class="card r" style="--d:7"><div class="big num">17</div><div class="lbl">Fare == 0</div><div class="sub">결측의 0 코딩</div></div>
+        </div>
+        <div class="callout warn r" style="--d:8;margin-top:28px"><strong>결론 —</strong> 이 데이터로 도메인 지식을 1:1 비교하면 위험. 모든 해석에 신뢰도 등급 필요.</div>
+      </div>
+    </section>
+
+    <!-- 3 QUALITY -->
+    <section class="slide">
+      <div class="wrap">
+        <div class="kicker r" style="--d:0">02 — 품질 점검</div>
+        <h2 class="r" style="--d:1">결측 2건. 중복 0건. 이상치 다수.</h2>
+        <div class="grid g-3" style="margin-bottom:30px">
+          <div class="card r" style="--d:2"><div class="big num">2</div><div class="lbl">결측치 · 0.15%</div><div class="sub">Embarked 두 건뿐</div></div>
+          <div class="card r" style="--d:3"><div class="big num">0</div><div class="lbl">중복 행</div><div class="sub">완전 중복·ID 중복 없음</div></div>
+          <div class="card r" style="--d:4"><div class="big num">171</div><div class="lbl">이상치 · Fare</div><div class="sub">IQR 기준 13.1%</div></div>
+        </div>
+        <div class="figrow">
+          <figure class="figure r" style="--d:5;--rot:-.8deg">
+            <img src="assets/03_outliers_boxplot.png" alt="박스플롯" loading="lazy" />
+            <figcaption>Fig.1 — 수치형 변수 박스플롯</figcaption>
+          </figure>
+          <figure class="figure r" style="--d:6;--rot:.7deg">
+            <img src="assets/04_distributions.png" alt="분포" loading="lazy" />
+            <figcaption>Fig.2 — Age·Fare 분포</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 CORRELATION -->
+    <section class="slide">
+      <div class="wrap">
+        <div class="kicker r" style="--d:0">03 — 상관관계</div>
+        <h2 class="r" style="--d:1">신호는 <em>Sex</em>와 <em>Pclass</em>.</h2>
+        <p class="lead r" style="--d:2;margin-bottom:10px">부트스트랩 95% 신뢰구간 포함. 회색 띠 = 불확실성 범위.</p>
+        <div class="r" style="--d:3;margin-top:16px">
+          <div class="corr"><div class="name">Sex</div>
+            <div class="track"><div class="range" style="left:85.1%;width:10.5%"></div><div class="fill pos" style="width:40.4%"></div></div>
+            <div class="val">+0.404<small>0.351~0.456</small></div></div>
+          <div class="corr"><div class="name">Pclass</div>
+            <div class="track"><div class="range" style="left:20.2%;width:10.9%"></div><div class="fill neg" style="right:50%;width:24.5%;--d:1"></div></div>
+            <div class="val">−0.245<small>−0.298~−0.189</small></div></div>
+          <div class="corr"><div class="name">Fare</div>
+            <div class="track"><div class="range" style="left:61.5%;width:11.4%"></div><div class="fill pos" style="width:17.4%;--d:2"></div></div>
+            <div class="val">+0.174<small>0.115~0.229</small></div></div>
+          <div class="corr"><div class="name">Embarked</div>
+            <div class="track"><div class="range" style="left:35.3%;width:11.6%"></div><div class="fill neg" style="right:50%;width:9.1%;--d:3"></div></div>
+            <div class="val">−0.091<small>−0.147~−0.031</small></div></div>
+          <div class="corr"><div class="name">Age</div>
+            <div class="track"><div class="range" style="left:38.7%;width:11.2%"></div><div class="fill neg" style="right:50%;width:5.6%;--d:4"></div></div>
+            <div class="val">−0.056<small>0에 근접</small></div></div>
+          <div class="corr"><div class="name">FamilySize</div>
+            <div class="track"><div class="range" style="left:47.7%;width:9.4%"></div><div class="fill pos" style="width:2.1%;--d:5"></div></div>
+            <div class="val">+0.021<small>0 포함 · 불확실</small></div></div>
+        </div>
+        <div class="rule r" style="--d:6"></div>
+        <div class="r" style="--d:7"><span class="tag hi">Sex · 높음</span><span class="tag hi">Pclass · 높음</span><span class="tag mid">Fare · 공선</span><span class="tag low">Age · 비선형</span><span class="tag low">FamilySize · 불확실</span></div>
+      </div>
+    </section>
+
+    <!-- 5 HEATMAP -->
+    <section class="slide">
+      <div class="wrap">
+        <div class="kicker r" style="--d:0">04 — 상호작용</div>
+        <h2 class="r" style="--d:1">여성이라도 3등급은 <em>절반</em>.</h2>
+        <div class="grid" style="grid-template-columns:1.1fr .9fr;gap:48px;align-items:center">
+          <div class="heat r" style="--d:2">
+            <div class="hl"></div><div class="hl" style="justify-content:center">1등급</div><div class="hl" style="justify-content:center">2등급</div><div class="hl" style="justify-content:center">3등급</div>
+            <div class="hl">남성</div>
+            <div class="cell" style="background:hsl(30,62%,42%);--d:3">0.25</div>
+            <div class="cell" style="background:hsl(12,62%,40%);--d:4">0.10</div>
+            <div class="cell" style="background:hsl(11,62%,40%);--d:5">0.10</div>
+            <div class="hl">여성</div>
+            <div class="cell" style="background:hsl(76,55%,35%);--d:6">0.63</div>
+            <div class="cell" style="background:hsl(79,55%,33%);--d:7">0.66</div>
+            <div class="cell" style="background:hsl(40,62%,40%);--d:8">0.33</div>
+          </div>
+          <div>
+            <p class="lead r" style="--d:3">성별 단독 상관 +0.40. 그러나 등급과 곱하면 이야기가 달라짐.</p>
+            <div class="rule r" style="--d:4"></div>
+            <p class="lead r" style="--d:5;font-size:15px">1·2등급 여성 생존율 <span class="num">0.63~0.66</span>. 3등급 여성 <span class="num">0.33</span>. 상호작용을 무시하면 놓치는 구조.</p>
+            <div class="r" style="--d:6;margin-top:16px"><span class="tag mid">신뢰도 중간 · 교란 가능</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6 AGE NONLINEAR -->
+    <section class="slide">
+      <div class="wrap">
+        <div class="kicker r" style="--d:0">05 — 비선형</div>
+        <h2 class="r" style="--d:1">Age 상관 −0.06. <em>그러나</em> 0~5세 생존율 0.55.</h2>
+        <div class="cols r" style="--d:2">
+          <div class="col"><span class="pct">0.55</span><div class="bar" style="--h:55.4"></div><span class="cap">0–5</span></div>
+          <div class="col alt"><span class="pct">0.24</span><div class="bar" style="--h:23.7;--d:1"></div><span class="cap">5–12</span></div>
+          <div class="col"><span class="pct">0.30</span><div class="bar" style="--h:30.3;--d:2"></div><span class="cap">12–18</span></div>
+          <div class="col alt"><span class="pct">0.22</span><div class="bar" style="--h:21.8;--d:3"></div><span class="cap">18–30</span></div>
+          <div class="col"><span class="pct">0.31</span><div class="bar" style="--h:30.5;--d:4"></div><span class="cap">30–45</span></div>
+          <div class="col alt"><span class="pct">0.27</span><div class="bar" style="--h:27.0;--d:5"></div><span class="cap">45–60</span></div>
+          <div class="col"><span class="pct">0.15</span><div class="bar" style="--h:15.2;--d:6"></div><span class="cap">60+</span></div>
+        </div>
+        <div class="callout r" style="--d:8;margin-top:26px"><strong>상관계수는 직선만 본다.</strong> 아이 우선. 상관 −0.06은 “관계 없음”이 아니라 “비선형”의 증거.</div>
+      </div>
+    </section>
+
+    <!-- 7 FAMILYSIZE -->
+    <section class="slide">
+      <div class="wrap">
+        <div class="kicker r" style="--d:0">06 — 비선형</div>
+        <h2 class="r" style="--d:1">가족은 <em>2~4명</em>일 때 최고.</h2>
+        <div class="cols r" style="--d:2">
+          <div class="col alt"><span class="pct">0.21</span><div class="bar" style="--h:20.6"></div><span class="cap">1명</span></div>
+          <div class="col"><span class="pct">0.38</span><div class="bar" style="--h:37.9"></div><span class="cap">2명</span></div>
+          <div class="col alt"><span class="pct">0.37</span><div class="bar" style="--h:37.1"></div><span class="cap">3명</span></div>
+          <div class="col"><span class="pct">0.49</span><div class="bar" style="--h:48.8"></div><span class="cap">4명</span></div>
+          <div class="col alt"><span class="pct">0.14</span><div class="bar" style="--h:13.6"></div><span class="cap">5명</span></div>
+          <div class="col"><span class="pct">0.12</span><div class="bar" style="--h:12.0"></div><span class="cap">6명</span></div>
+          <div class="col alt"><span class="pct">0.00</span><div class="bar" style="--h:2"></div><span class="cap">8명</span></div>
+          <div class="col"><span class="pct">0.00</span><div class="bar" style="--h:2"></div><span class="cap">11명</span></div>
+        </div>
+        <div class="callout warn r" style="--d:8;margin-top:26px"><strong>단, 신뢰도 낮음.</strong> 5명 이상은 표본 22·25·16·8·11명. 가족은 운명을 공유 — 독립 표본 아님.</div>
+      </div>
+    </section>
+
+    <!-- 8 ACCURACY ILLUSION -->
+    <section class="slide">
+      <div class="wrap">
+        <div class="kicker r" style="--d:0">07 — 정확도의 함정</div>
+        <h2 class="r" style="--d:1">정확도 0.76. <em>기준선</em> 0.74.</h2>
+        <div class="grid g-3" style="margin-bottom:26px">
+          <div class="card r" style="--d:2"><div class="big num" data-count="0.739" data-dec="3">0.000</div><div class="lbl">전부 사망 기준선</div><div class="sub">아무것도 안 해도 이만큼</div></div>
+          <div class="card r" style="--d:3"><div class="big num" data-count="0.763" data-dec="3">0.000</div><div class="lbl">1차 모델 정확도</div><div class="sub">차이 +0.024</div></div>
+          <div class="card r" style="--d:4"><div class="big num" data-count="0.48" data-dec="2" style="color:var(--accent)">0.00</div><div class="lbl">생존자 재현율</div><div class="sub">절반 이상을 놓침</div></div>
+        </div>
+        <div class="callout r" style="--d:5"><strong>정확도는 착시.</strong> 26%만 생존하니 “전부 사망”이 강력한 기준선. 생존자를 놓치지 않으려면 재현율을 봐야 함.</div>
+      </div>
+    </section>
+
+    <!-- 9 MODEL IMPROVEMENT -->
+    <section class="slide">
+      <div class="wrap">
+        <div class="kicker r" style="--d:0">08 — 인사이트 → 모델</div>
+        <h2 class="r" style="--d:1">재현율 <em>0.48 → 0.73</em>.</h2>
+        <div class="ba r" style="--d:2">
+          <div class="item old">
+            <div class="v num">0.48</div>
+            <div class="b"></div>
+            <div class="lbl" style="margin-top:12px">1차 모델 · 기본</div>
+          </div>
+          <div class="item new">
+            <div class="v num">0.73</div>
+            <div class="b"></div>
+            <div class="lbl" style="margin-top:12px">최종 모델 · IsChild + FamilySize + balanced</div>
+          </div>
+        </div>
+        <div class="rule r" style="--d:4"></div>
+        <div class="grid g-4">
+          <div class="r" style="--d:5"><div class="lbl">피처</div><div class="sub" style="font-size:14px">IsChild · FamilySize<br>IsAlone · FareIsZero</div></div>
+          <div class="r" style="--d:6"><div class="lbl">결측 처리</div><div class="sub" style="font-size:14px">Fare==0 → NaN<br>중앙값 대체 + 플래그</div></div>
+          <div class="r" style="--d:7"><div class="lbl">불균형</div><div class="sub" style="font-size:14px">class_weight balanced<br>+ 임계값 조정</div></div>
+          <div class="r" style="--d:8"><div class="lbl">평가</div><div class="sub" style="font-size:14px">5겹 교차검증<br>평균 ± 표준편차</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 10 FINAL METRICS -->
+    <section class="slide">
+      <div class="wrap">
+        <div class="kicker r" style="--d:0">09 — 최종 성능</div>
+        <h2 class="r" style="--d:1">홀드아웃 테스트 · 262명.</h2>
+        <div class="grid g-4" style="margin-bottom:30px">
+          <div class="card r" style="--d:2"><div class="big num" data-count="0.782" data-dec="3">0.000</div><div class="lbl">ROC-AUC</div></div>
+          <div class="card r" style="--d:3"><div class="big num" data-count="0.662" data-dec="3" style="color:var(--green)">0.000</div><div class="lbl">재현율 Recall</div></div>
+          <div class="card r" style="--d:4"><div class="big num" data-count="0.511" data-dec="3">0.000</div><div class="lbl">정밀도 Precision</div></div>
+          <div class="card r" style="--d:5"><div class="big num" data-count="0.577" data-dec="3">0.000</div><div class="lbl">F1</div></div>
+        </div>
+        <table class="r" style="--d:6">
+          <thead><tr><th>모델 · 5겹 CV</th><th class="n">ROC-AUC</th><th class="n">재현율</th><th class="n">F1</th></tr></thead>
+          <tbody>
+            <tr><td>LogisticRegression</td><td class="n">0.789</td><td class="n">0.713</td><td class="n">0.582</td></tr>
+            <tr class="hlrow"><td>RandomForest · 채택</td><td class="n">0.805</td><td class="n">0.725</td><td class="n">0.605</td></tr>
+            <tr><td>HistGradientBoosting</td><td class="n">0.802</td><td class="n">0.453</td><td class="n">0.526</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 11 LIMITS -->
+    <section class="slide">
+      <div class="wrap">
+        <div class="kicker r" style="--d:0">10 — 한계</div>
+        <h2 class="r" style="--d:1">틀릴 수 있는 <em>조건</em>.</h2>
+        <div class="grid g-3">
+          <div class="card r" style="--d:2"><div class="lbl" style="margin-bottom:10px">인코딩</div><div class="sub">Sex가 반대로 코딩됐다면 최강 변수 결론 뒤집힘</div></div>
+          <div class="card r" style="--d:3"><div class="lbl" style="margin-bottom:10px">대체값</div><div class="sub">Age가 평균·회귀 대체라면 나이 신호는 실제보다 약함</div></div>
+          <div class="card r" style="--d:4"><div class="lbl" style="margin-bottom:10px">가족</div><div class="sub">독립 표본 아님. 대가족 패턴은 소수 가족의 운명일 수 있음</div></div>
+          <div class="card r" style="--d:5"><div class="lbl" style="margin-bottom:10px">공선성</div><div class="sub">Fare·Pclass 상관 −0.56. 어느 쪽 효과인지 분리 불가</div></div>
+          <div class="card r" style="--d:6"><div class="lbl" style="margin-bottom:10px">표본</div><div class="sub">N=1,309, 테스트 262. 성능 수치 ±0.02~0.03 흔들림</div></div>
+          <div class="card r" style="--d:7"><div class="lbl" style="margin-bottom:10px">순위</div><div class="sub">모델 간 CI 겹침. “A가 B보다 낫다” 판단 불가</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 12 RECOMMEND -->
+    <section class="slide">
+      <div class="wrap">
+        <div class="kicker r" style="--d:0">11 — 권고</div>
+        <h2 class="r" style="--d:1">다음 <em>행동</em>.</h2>
+        <div class="grid g-2" style="grid-template-columns:1fr 1fr;gap:0 60px">
+          <div>
+            <div class="corr" style="grid-template-columns:34px 1fr;border-bottom:1px solid var(--line)"><div class="name r" style="--d:2">01</div><div class="sub r" style="--d:2">정확도 단독 보고 금지. 기준선·재현율·F1 병기</div></div>
+            <div class="corr" style="grid-template-columns:34px 1fr"><div class="name r" style="--d:3">02</div><div class="sub r" style="--d:3">목적에 따라 임계값 조정 — 놓치면 낮추고, 오경보 줄이면 높임</div></div>
+            <div class="corr" style="grid-template-columns:34px 1fr"><div class="name r" style="--d:4">03</div><div class="sub r" style="--d:4">가족·티켓 단위 GroupKFold 재평가</div></div>
+          </div>
+          <div>
+            <div class="corr" style="grid-template-columns:34px 1fr"><div class="name r" style="--d:5">04</div><div class="sub r" style="--d:5">GridSearchCV 하이퍼파라미터 튜닝</div></div>
+            <div class="corr" style="grid-template-columns:34px 1fr"><div class="name r" style="--d:6">05</div><div class="sub r" style="--d:6">Fare==0·Age 대체 규칙의 원본 정의 확보 후 재현</div></div>
+            <div class="corr" style="grid-template-columns:34px 1fr"><div class="name r" style="--d:7">06</div><div class="sub r" style="--d:7">견고한 신호(Sex·Pclass) 중심으로 의사결정</div></div>
+          </div>
+        </div>
+        <div class="rule r" style="--d:8"></div>
+        <p class="lead r" style="--d:9">핵심 — 데이터를 의심하고, 지표를 나눠 보고, 불확실성을 숨기지 않기.</p>
+      </div>
+    </section>
+
+    <!-- 13 CLOSING -->
+    <section class="slide cover">
+      <div class="wrap" style="text-align:left">
+        <div class="kicker r" style="--d:0">End of Issue</div>
+        <h1 style="font-size:clamp(44px,9vw,132px)"><span class="r-clip" style="--d:1;display:block">읽고, 의심하고,</span><span class="r-clip" style="--d:2;display:block">다시 <span class="amp">검증</span>.</span></h1>
+        <div class="cover-meta r" style="--d:4">
+          <span>github.com/rchoi-v8/titanic</span>
+          <span>INSIGHTS.md</span>
+          <span>5 Notebooks</span>
+        </div>
+        <p class="lead r" style="--d:5;margin-top:34px">근거 — quality check · correlation viz · validation · final model.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <footer class="bottombar">
+    <span>Titanic · 정확도의 착시</span>
+    <span class="counter"><b id="cur">01</b> / <span id="total">13</span></span>
+  </footer>
+
+  <nav class="dots" id="dots"></nav>
+  <div class="hint">← → 또는 Space · 클릭으로 이동</div>
+</div>
+
+<script>
+(function(){
+  const slides=[...document.querySelectorAll('.slide')];
+  const dotsBox=document.getElementById('dots');
+  const progress=document.getElementById('progress');
+  const cur=document.getElementById('cur');
+  document.getElementById('total').textContent=String(slides.length).padStart(2,'0');
+  let i=0, animating=false;
+
+  slides.forEach((_,k)=>{
+    const b=document.createElement('button');
+    b.addEventListener('click',()=>go(k));
+    dotsBox.appendChild(b);
+  });
+  const dots=[...dotsBox.children];
+
+  function animateCounters(slide){
+    slide.querySelectorAll('[data-count]').forEach(el=>{
+      const target=parseFloat(el.dataset.count);
+      const dec=parseInt(el.dataset.dec||'0',10);
+      const dur=1200; const start=performance.now();
+      function tick(now){
+        const t=Math.min((now-start)/dur,1);
+        const e=1-Math.pow(1-t,3);
+        el.textContent=(target*e).toFixed(dec);
+        if(t<1) requestAnimationFrame(tick);
+        else el.textContent=target.toFixed(dec);
+      }
+      requestAnimationFrame(tick);
+    });
+  }
+
+  function go(n){
+    if(animating) return;
+    n=Math.max(0,Math.min(slides.length-1,n));
+    if(n===i && slides[i].classList.contains('active')) return;
+    animating=true;
+    slides[i].classList.remove('active');
+    i=n;
+    const s=slides[i];
+    s.classList.add('active');
+    dots.forEach((d,k)=>d.classList.toggle('on',k===i));
+    cur.textContent=String(i+1).padStart(2,'0');
+    progress.style.width=((i)/(slides.length-1)*100)+'%';
+    animateCounters(s);
+    setTimeout(()=>{animating=false;},500);
+  }
+
+  document.addEventListener('keydown',e=>{
+    if(['ArrowRight','ArrowDown',' ','PageDown','Enter'].includes(e.key)){e.preventDefault();go(i+1);}
+    else if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){e.preventDefault();go(i-1);}
+    else if(e.key==='Home'){go(0);} else if(e.key==='End'){go(slides.length-1);}
+  });
+  window.addEventListener('click',e=>{
+    if(e.target.closest('.dots')||e.target.closest('a')) return;
+    go(i+1);
+  });
+
+  let sx=null;
+  window.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;},{passive:true});
+  window.addEventListener('touchend',e=>{
+    if(sx===null) return;
+    const dx=e.changedTouches[0].clientX-sx;
+    if(Math.abs(dx)>50) go(dx<0?i+1:i-1);
+    sx=null;
+  },{passive:true});
+
+  dots[0].classList.add('on');
+  progress.style.width='0%';
+  animateCounters(slides[0]);
+})();
+</script>
+</body>
+</html>
