@@ -7,7 +7,7 @@
 | 주차 · 프로젝트 | 주제 | 폴더 | 발표 자료 |
 |---|---|---|---|
 | week-03-titanic | 타이타닉 생존 분석 + 예측 모델 | [`week-03-titanic/`](week-03-titanic/) | [deck](https://rchoi-v8.github.io/intro-to-data-literacy/week-03-titanic/) |
-| week-03-pima-indians-diabetes | 피마 인디언 당뇨 예측 | (예정) | (예정) |
+| week-03-pima-indians-diabetes | 피마 인디언 당뇨 예측 | [`week-03-pima-indians-diabetes/`](week-03-pima-indians-diabetes/) | [deck](https://rchoi-v8.github.io/intro-to-data-literacy/week-03-pima-indians-diabetes/) |
 
 ## 폴더 구조
 
@@ -19,9 +19,17 @@ intro-to-data-literacy/
 │  ├─ eda_quality_check.py
 │  ├─ INSIGHTS.md
 │  └─ README.md
+├─ week-03-pima-indians-diabetes/   # 피마 인디언 당뇨 프로젝트
+│  ├─ analysis.py            # 품질 점검
+│  ├─ correlation.py         # 상관관계 시각화
+│  ├─ model.py               # 예측 모델
+│  ├─ reports/               # 생성된 그래프 이미지 + 모델
+│  ├─ REPORT.md
+│  └─ README.md
 └─ docs/                     # GitHub Pages 사이트 소스
    ├─ index.html             # 프로젝트 목차 (랜딩)
-   └─ week-03-titanic/       # 타이타닉 발표 덱
+   ├─ week-03-titanic/       # 타이타닉 발표 덱
+   └─ week-03-pima-indians-diabetes/  # 당뇨 발표 덱
 ```
 
 ## 발표 사이트 (GitHub Pages)
